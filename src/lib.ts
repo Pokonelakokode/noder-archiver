@@ -43,23 +43,26 @@ export default class Archiver {
         this.addToArchive = this.addToArchive.bind(this);
     }
 
-    public async addToArchive() {
-        console.log("STARTING TO ARCHIVE");
-        const ts = new Date();
-        const fileName = path.join(this.dir, `${ts.getFullYear()}-${ts.getMonth() + 1}-${ts.getDate()}-${ts.getHours()}-${ts.getMinutes()}-${ts.getSeconds()}-archive.zip`);
-        const output = fs.createWriteStream(fileName);
-        output.on("close", () => {
-            console.log(archive.pointer() + " total bytes");
-            console.log("archiver has been finalized and the output file descriptor has closed.");
+    public async addToArchive(): Promise<string> {
+        return new Promise(async (resolve, reject) => {
+            console.log("STARTING TO ARCHIVE");
+            const ts = new Date();
+            const fileName = path.join(this.dir, `${ts.getFullYear()}-${ts.getMonth() + 1}-${ts.getDate()}-${ts.getHours()}-${ts.getMinutes()}-${ts.getSeconds()}-archive.zip`);
+            const output = fs.createWriteStream(fileName);
+            output.on("close", () => {
+                console.log(archive.pointer() + " total bytes");
+                console.log("archiver has been finalized and the output file descriptor has closed.");
+                resolve(fileName);
+            });
+            const archive = archiver("zip", { zlib: {level: 9}});
+            archive.pipe(output);
+            this.files.forEach((file) => {
+                archive.file(file.path, {name: file.path.replace(this.dir, "")});
+            });
+            await archive.finalize();
+            console.log("ARCHIVE FINISHED");
+            // return fileName;
         });
-        const archive = archiver("zip", {zlib: {level: 9}});
-        archive.pipe(output);
-        this.files.forEach((file) => {
-            archive.file(file.path, {name: file.path.replace(this.dir, "")});
-        });
-        await archive.finalize();
-        console.log("ARCHIVE FINISHED");
-        return fileName;
     }
 
     public async getFiles(): Promise<IFile[]> {
