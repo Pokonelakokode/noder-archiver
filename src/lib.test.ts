@@ -9,38 +9,23 @@ function daysBefore(days: number) {
 }
 
 describe("Archiver", () => {
-    // beforeAll(async cb => {
-    //     mock({
-    //         'path/to/file.txt': 'file content here'
-    //     });
-    //     cb();
-    //     // cb();
-    // },10000);
-    // afterAll(cb => {
-    //     mock.restore();
-    // });
     it("should be able to retrieve files older then 30 days", async (done) => {
-        // fs.readdir('./',(err, files) => {
-        //     console.dir(files)
-        // })
-        // const files = await readdir("./");
-
-        // done();
-        const archiver = new Archiver("./", {fromAge: daysBefore(30)});
+        const archiver = new Archiver();
         const files = await archiver.getFiles();
         const output = await archiver.addToArchive();
-        // await testZip("f:/sites/node-archiver/2019-12-9-23-2-25-archive.zip");
         const testFileLength = await testZip(output);
         expect(files.length).toBe(testFileLength.length);
         done();
-        // setTimeout(async () => {
-        //     const testFileLength = await testZip(output);
-        //     expect(files.length).toBe(testFileLength.length);
-        //     done();
-        // }, 2000);
-        // console.dir(files);
-
     }, 100000);
+    it("should be able to retrieve files from only the current folder", async (done) => {
+        const archiver = new Archiver({recursive: false, fromAge: new Date()});
+        const files = await archiver.getFiles();
+        const output = await archiver.addToArchive();
+        const testFileLength = await testZip(output);
+        expect(files.length).toBe(testFileLength.length);
+        done();
+    }, 100000);
+
 });
 
 async function testZip(path: string): Promise<string[]> {

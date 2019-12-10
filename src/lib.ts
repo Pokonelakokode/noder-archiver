@@ -2,13 +2,17 @@ import archiver from "archiver";
 import * as fs from "fs";
 import * as path from "path";
 import {promisify} from "util";
+
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 
 interface IOptions {
+    dir: string;
     recursive: boolean;
+    format: archiver.Format;
     fromAge: Date;
     fileEvent: "birth" | "change" | "modify" | "access";
+    archiverOptions: archiver.ArchiverOptions;
 }
 
 interface IFile {
@@ -17,10 +21,12 @@ interface IFile {
 }
 
 const defaultOptions: IOptions = {
+    archiverOptions: {zlib: {level: 9}},
+    dir: "./",
     fileEvent: "modify",
-    // fromAge: new Date(),
+    format: "zip",
     fromAge: new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000),
-    recursive: false,
+    recursive: true,
 };
 
 enum FileEvents {
@@ -35,9 +41,9 @@ export default class Archiver {
     private options: IOptions;
     private files: IFile[] = [];
 
-    constructor(dir: string = "./", options: Partial<IOptions> = {}) {
-        this.dir = path.resolve(dir);
+    constructor(options: Partial<IOptions> = {}) {
         this.options = {...defaultOptions, ...options};
+        this.dir = path.resolve(this.options.dir);
         this.getFiles = this.getFiles.bind(this);
         this.readDir = this.readDir.bind(this);
         this.addToArchive = this.addToArchive.bind(this);
@@ -51,17 +57,20 @@ export default class Archiver {
             const output = fs.createWriteStream(fileName);
             output.on("close", () => {
                 console.log(archive.pointer() + " total bytes");
-                console.log("archiver has been finalized and the output file descriptor has closed.");
+                console.log("Archiver has been finalized and the output file descriptor has closed.");
                 resolve(fileName);
             });
-            const archive = archiver("zip", { zlib: {level: 9}});
+            const archive = archiver("zip", this.options.archiverOptions);
+            archive.on("error", (error) => {
+                console.log(error);
+                reject(error);
+            });
             archive.pipe(output);
             this.files.forEach((file) => {
                 archive.file(file.path, {name: file.path.replace(this.dir, "")});
             });
             await archive.finalize();
             console.log("ARCHIVE FINISHED");
-            // return fileName;
         });
     }
 
@@ -72,12 +81,17 @@ export default class Archiver {
         console.info("READ SUCCESSFUL");
         return files;
     }
+
     public async readDir(dir: string = this.dir): Promise<IFile[]> {
         const subDirs = await readdir(dir);
         const files = await Promise.all(subDirs.map(async (subdir) => {
             const res = path.resolve(dir, subdir);
             const fileStat = await stat(res);
-            if (fileStat.isDirectory()) { return this.readDir(res); }
+            if (fileStat.isDirectory()) {
+                return this.options.recursive ?
+                    this.readDir(res) :
+                    Promise.resolve(null);
+            }
             return fileStat[FileEvents[this.options.fileEvent]] < this.options.fromAge.getTime() ?
                 Promise.resolve({name: subdir, path: res}) :
                 Promise.resolve(null);
@@ -85,21 +99,3 @@ export default class Archiver {
         return files.reduce((a: IFile[], f) => f !== null ? a.concat(f) : a, []);
     }
 }
-
-// function readdir(dir: string): Promise<string[]> {
-//     return new Promise<string[]>((resolve, reject) => {
-//         fs.readdir(dir, (err, files) => {
-//             if (err) { return reject(err); }
-//             return resolve(files);
-//         });
-//     });
-// }
-//
-// function stat(filePath: string): Promise<Stats> {
-//     return new Promise<Stats>((resolve, reject) => {
-//         fs.stat(filePath, (err, stats) => {
-//             if (err) { return reject(err); }
-//             return resolve(stats);
-//         });
-//     });
-// }
